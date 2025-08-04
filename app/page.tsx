@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import VideoStream from '../compoment/VideoStream';
-import WebRTCConnection from '../compoment/WebRTCConnection';
+// import VideoStream from '../components/VideoStream';
+import WebRTCConnection from '../components/WebRTCConnection';
 
 export default function VideoChat() {
   const [roomId, setRoomId] = useState('');
