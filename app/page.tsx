@@ -8,7 +8,8 @@ export default function Page() {
   // --- State for UI ---
   const [peerId, setPeerId] = useState('');
   const [remotePeerIdValue, setRemotePeerIdValue] = useState('');
-  const [roomCode, setRoomCode] = useState(''); // To hold the room code for the socket
+  const [roomCode, setRoomCode] = useState('none'); // To hold the room code for the socket
+  // const []
 
   // --- Refs for persistent objects and DOM elements ---
   const remoteVideoRef = useRef(null);
@@ -63,6 +64,8 @@ export default function Page() {
           remoteVideoRef.current.srcObject = remoteStream;
           remoteVideoRef.current.play();
         });
+        console.log('this is inside call fun :', roomCode)
+        initWebSocket();
       })
       .catch(err => {
         console.error("Failed to get local stream", err);
@@ -71,26 +74,37 @@ export default function Page() {
 
   // --- WebSocket Initialization ---
   const initWebSocket = () => {
-    const code = prompt("Enter a room code to create/join:");
-    if (!code) return;
-    setRoomCode(code);
+    // const code = prompt("Enter a room code to create/join:");
+    // if (!code) return;
+    // setRoomCode(code);
+    console.log("this the socket roomcode", roomCode)
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
 
     // Use the address of your WebSocket server
-    const WS_BASE = `ws://localhost:8000/livetranslation_ws/`;
+    const WS_BASE = `ws://127.0.0.1:8000/livetranslation_ws/`;
+    console.log('------------------ SOCKET PART -------------------------')
+    const ws = new WebSocket(WS_BASE + roomCode);
 
-    const ws = new WebSocket(WS_BASE);
-    
     ws.onopen = () => {
-      console.log("✅ WebSocket connection established.");
+      console.log("✅ WebSocket connection established.", ws);
+      ws.send(JSON.stringify({
+        message: 'Hello my name is ahmed',
+        code: roomCode
+      }));
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.type === 'translation') {
+      if (data.type === 'room-created') {
         // Here we receive the message and log it, as requested
-        console.log(`RECEIVED TRANSLATION: ${data.message}`);
+        console.log(`RECEIVED ROOMCODE: ${data.code}`);
+
+        setRoomCode(data.code)
       }
     };
+    ws.send(JSON.stringify({ message: 'Hello my name is ahmed', code: roomCode }));
 
     ws.onclose = () => {
       console.log("❌ WebSocket connection closed.");
@@ -106,51 +120,83 @@ export default function Page() {
   // --- Speech Recognition Initialization ---
   const initSpeechRecognition = () => {
     // Check if a room is set
-    if (!roomCode) {
-      alert("Please join a room before starting recognition.");
+
+    console.log('----BEFOR I SEND WHIT SOCKLER========')
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket is not connected. Current state:", socketRef.current?.readyState);
+      alert("WebSocket is not connected. Please establish a connection first.");
       return;
     }
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech Recognition is not supported in this browser.");
-      return;
+    if (!messageInput.trim()) return;
+
+    try {
+      socketRef.current.send(JSON.stringify({
+        message: messageInput,
+        code: roomCode
+      }));
+
+      // Add message to UI
+      setMessages(prev => [...prev, {
+        text: messageInput,
+        type: 'sent',
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+
+      setMessageInput('');
+    } catch (error) {
+      console.error("Error sending message:", error);
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US'; // You can make this dynamic
-    recognition.continuous = true; // Keep listening
-    recognition.interimResults = false;
+    // socketRef.current.send(JSON.stringify({ message: 'Hello my name is ahmed', code: roomCode }));
+    // if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    // }
+    // if (!roomCode) {
+    //   alert("Please join a room before starting recognition.");
+    //   return;
+    // }
 
-    recognition.onstart = () => {
-      console.log("🎤 Speech recognition started.");
-    };
+    // const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // if (!SpeechRecognition) {
+    //   alert("Speech Recognition is not supported in this browser.");
+    //   return;
+    // }
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[event.results.length - 1][0].transcript.trim();
-      if (transcript) {
-        console.log(`YOU SAID: "${transcript}"`);
-        // Send the transcript over the WebSocket
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ message: transcript, code: roomCode }));
-        }
-      }
-    };
+    // const recognition = new SpeechRecognition();
+    // recognition.lang = 'en-US'; // You can make this dynamic
+    // recognition.continuous = true; // Keep listening
+    // recognition.interimResults = false;
 
-    recognition.onerror = (event) => {
-      console.error("Speech Recognition Error:", event.error);
-    };
+    // recognition.onstart = () => {
+    //   console.log("🎤 Speech recognition started.");
+    // };
 
-    recognition.onend = () => {
-      console.log("🎤 Speech recognition stopped. Restarting...");
-      // Auto-restart recognition if it stops
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        try { recognition.start() } catch (e) { console.error("Could not restart recognition", e) }
-      }
-    };
+    // recognition.onresult = (event) => {
+    //   const transcript = event.results[event.results.length - 1][0].transcript.trim();
+    //   if (transcript) {
+    //     console.log(`YOU SAID: "${transcript}"`);
+    //     // Send the transcript over the WebSocket
+    //     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    //       socketRef.current.send(JSON.stringify({ message: transcript, code: roomCode }));
+    //     }
+    //   }
+    // };
 
-    recognition.start();
-    recognitionRef.current = recognition;
+    // recognition.onerror = (event) => {
+    //   console.error("Speech Recognition Error:", event.error);
+    //   console.error("Speech Recognition Error message:", event);
+    // };
+
+    // recognition.onend = () => {
+    //   console.log("🎤 Speech recognition stopped. Restarting...");
+    //   // Auto-restart recognition if it stops
+    //   if (socketRef.current?.readyState === WebSocket.OPEN) {
+    //     try { recognition.start() } catch (e) { console.error("Could not restart recognition", e) }
+    //   }
+    // };
+
+    // recognition.start();
+    // recognitionRef.current = recognition;
   };
 
   return (
